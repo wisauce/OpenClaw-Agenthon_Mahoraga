@@ -5,6 +5,27 @@
 
 This agent is purpose-built for autonomous digital trade policy review. It uses Hermes Agent as its framework — with persona files, skills, memory, tool calls, web extraction, browser automation, code execution, and multi-agent task delegation — to complete end-to-end RDTII policy-review workflows without manual intervention.
 
+## Repository validation status
+
+This repository is intended to be checked by external coding agents such as **Claude Code** and **Cursor Agent**. A fresh clone should show:
+
+- the official agent name is **RDTII Agent**;
+- the team name is **Mahoraga**;
+- the runnable demo DB is local SQLite and requires no API key;
+- secrets are represented only by `config.example.yaml`, not real credentials;
+- generated runtime files such as `*.sqlite`, `config.yaml`, `.env`, logs, and sessions are ignored.
+
+Fast validation command:
+
+```bash
+python3 scripts/rdtii_kg.py --db outputs/rdtii_kg_demo.sqlite init
+python3 scripts/rdtii_kg.py --db outputs/rdtii_kg_demo.sqlite load-sample
+python3 scripts/rdtii_kg.py --db outputs/rdtii_kg_demo.sqlite context --indicator P6_I1
+rm -f outputs/rdtii_kg_demo.sqlite
+```
+
+Expected result: the `context` command prints JSON containing indicator `P6_I1`, supporting evidence nodes, source-query logs, and the stored score state.
+
 ## What makes this an agent
 
 Built on Hermes Agent, this system demonstrates genuine agent behavior beyond chatbot interactions:
@@ -38,7 +59,7 @@ RDTII Agent follows a structured loop that combines autonomous AI processing wit
 flowchart TB
     User(["Policy Reviewer"]) -->|"submits country name\nor policy document"| Agent
 
-    subgraph Agent["RDTII FRAMEWORK AGENT"]
+    subgraph Agent["RDTII AGENT"]
         direction TB
         A[Load RDTII 2.1\nMethodology & 12 Pillars]
         B[Discover Sources:\nlaws, regulations,\ntrade databases]
@@ -124,7 +145,7 @@ See `references/agenthon-compliance-checklist.md` for the full competition check
 
 ```bash
 # Clone or place this profile
-git clone https://github.com/wisauce/OpenClaw-Agenthon_Mahoraga.git ~/.hermes/profiles/lomba
+git clone https://github.com/wisauce/OpenClaw2026_Mahoraga_RDTIIAgent.git ~/.hermes/profiles/lomba
 cd ~/.hermes/profiles/lomba
 
 # Copy the redacted config and add your API keys
