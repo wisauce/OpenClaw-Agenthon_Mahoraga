@@ -1,0 +1,49 @@
+# Hermes secrets / credentials
+.env
+.env.*
+auth.json
+auth.lock
+**/*token*
+**/*secret*
+**/*credential*
+
+# Runtime state / databases / locks
+state.db*
+*.db
+*.sqlite
+*.sqlite3
+*.lock
+*.pid
+*.sock
+
+# Logs and session transcripts
+logs/
+*.log
+sessions/
+*.jsonl
+.hermes_history
+
+# Caches / generated runtime files
+cache/
+audio_cache/
+video_cache/
+image_cache/
+tmp/
+temp/
+__pycache__/
+*.py[cod]
+*.bak*
+.update_check
+.skills_prompt_snapshot.json
+context_length_cache.yaml
+models_dev_cache.json
+ollama_cloud_models_cache.json
+gateway_state.json
+channel_directory.json
+cron/.tick.lock
+
+# Local machine/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
