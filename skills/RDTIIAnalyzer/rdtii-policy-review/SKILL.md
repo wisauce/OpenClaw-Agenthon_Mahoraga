@@ -1,7 +1,7 @@
 ---
 name: rdtii-policy-review
 description: Use when helping with RDTII 2.1 digital trade policy review systems, mapping legal/regulatory measures to RDTII pillars and indicators, scoring reviewer assessments, designing schemas, or auditing evidence for UN Regional Digital Trade Integration Index workflows.
-version: 1.0.0
+version: 1.2.0
 author: Hermes Agent
 license: MIT
 metadata:
@@ -639,11 +639,19 @@ When a user asks for an RDTII score for a country/economy, first distinguish two
 
 Do not invent an overall score if only the methodology guide is available. The guide may contain examples mentioning an economy without containing that economy's completed scorecard. If the official score cannot be verified, say so and offer to compute from indicator data, policy documents, or one pillar at a time.
 
+### Action priority when user asks "what's the score?"
+
+When a user asks "what's the score" after a provisional report with missing databases, **do not produce a score**. Instead:
+- State concretely which databases remain unqueried
+- Offer to run one pillar fully (with verified primary sources) as a demo
+- OR offer to attempt the blocked databases again
+- Only produce a numerical score when at least one pillar has complete indicator-level evidence with verified primary sources and documented database queries
+
 For session-specific notes and a reusable response shape, see `references/country-score-checks.md`.
 
 ## Hackathon / Agenthon Packaging Context
 
-When packaging an RDTII Hermes Agent such as Mahoraga for **RISTEK x Build Club OpenClaw Agenthon 2026**, apply the guideline summaries in `references/openclaw-agenthon-technical-guidelines.md` and `references/agenthon-compliance-checklist.md`.
+When packaging an RDTII Hermes Agent such as Mahoraga for **RISTEK x Build Club OpenClaw Agenthon 2026**, apply the guideline summaries in `references/openclaw-agenthon-technical-guidelines.md` and `references/agenthon-compliance-checklist.md`. For a reusable profile-packaging workflow learned from an end-to-end Mahoraga repository refresh, see `references/agenthon-profile-packaging.md`.
 
 Key implications:
 
@@ -653,7 +661,7 @@ Key implications:
 - Make clear that the unique domain skill lives under `skills/RDTIIAnalyzer/`; other skills are bundled Hermes skills.
 - For demos/decks, emphasize agent autonomy, RDTII evidence extraction/mapping/scoring workflow, and human-review safeguards.
 
-## Reviewer Workflow
+## Economy Review Sequence
 
 For any country/economy, do **not** produce a final RDTII score from high-level pillar impressions. The guideline-compliant workflow is indicator-level:
 
@@ -700,6 +708,36 @@ Use the RDTII guide to determine the source for each indicator. Typical source c
 - **Online sales/transactions:** e-commerce law, e-signature/e-transaction law, consumer protection e-commerce rules, payment-services regulation, delivery/logistics requirements.
 
 Secondary sources such as WTO I-TIP, Global Trade Alert, V-Dem, TAPED, legal reviews, or news are often required to locate measures or external scores, but final legal evidence should be traced back to primary sources whenever possible.
+
+### Database and Source Access — Fallback Procedure
+
+Many required RDTII sources (TAPED, SSO Singapore, some government gazettes) block automated access with Cloudflare, CloudFront, or bot-detection challenges. Do NOT silently skip them. Follow this procedure:
+
+1. **Attempt access** via browser tool first. Try the canonical URL.
+2. **If blocked** (403, Cloudflare challenge, timeout), try an alternative method:
+   - **curl with proper User-Agent** from terminal (some sites block the browser's viewport but accept curl).
+   - **Wayback Machine** (archive.org) for the resource.
+   - **Official API** if one exists for the database.
+3. **If still blocked**, document the failure in the evidence log with:
+   - URL attempted
+   - Error type (403 / Cloudflare / CloudFront / timeout / etc.)
+   - Alternative method attempted and result
+   - Status: `blocked_automated_access`
+4. **Note it in the report**. Do NOT replace a blocked database query with a generic web search result without stating the replacement explicitly. If you must use a secondary source because the primary database was blocked, say so: `"TAPED blocked by Cloudflare; used [alternative source] instead — requires manual verification."`
+5. **Return to the blocked source later** if the session's toolset or proxy conditions change. Mark it `pending_manual_query` for the human reviewer.
+
+Known accessibility as of 2026-05 (documented per session; update as conditions change):
+
+| Source | Accessible? | Notes |
+|--------|-----------|-------|
+| WTO I-TIP | Yes — browser | Complex multi-step form, works without proxies |
+| Japan PPC (APPI PDF) | Yes — curl + browser | PDF downloadable, 2-column layout needs `pdftotext` |
+| Australia legislation.gov.au | Yes — browser + curl | Reliably accessible, English-language primary source |
+| UN ESCAP TAPED | No — Cloudflare block | Requires residential proxy |
+| Singapore SSO | No — CloudFront 403 | Requires residential proxy |
+| METI / JETRO (Japan) | Timeout | Slow response; may need off-peak retry |
+
+See `references/database-accessibility.md` for an expanded log with URLs and error details.
 
 ## Indicator Evidence Record
 
@@ -748,9 +786,9 @@ For each indicator, maintain this record shape:
 }
 ```
 
-## Reviewer Workflow
+## Product Workflow
 
-Recommended product workflow:
+When designing the product UI or user journey for an RDTII review system:
 
 ```txt
 Upload source document / choose economy
@@ -777,6 +815,51 @@ System calculates country/economy RDTII score
    ↓
 Export audit report with evidence table and source-query log
 ```
+
+## Multi-Pillar Parallel Research Pattern
+
+When the user asks to collect evidence for a full economy across all 12 pillars, do NOT attempt to search every pillar sequentially in a single agent turn. Use parallel subagent research instead. This pattern was validated during the Japan 2025 pipeline execution.
+
+### Recommended parallel split
+
+Dispatch **3–4 subagents in parallel** via `delegate_task(tasks=[...])`, dividing the 12 pillars by thematic cluster:
+
+| Subagent | Pillars | Focus | Toolsets needed |
+|----------|---------|-------|-----------------|
+| **Data & cross-border** | P6, P7 | Data protection law, cross-border transfer rules, enforcement, cybersecurity | `web`, `file` |
+| **Telecom & platforms** | P5, P8, P9 | Telecom law, intermediary liability, content access | `web`, `file` |
+| **Trade, investment & procurement** | P1, P2, P3, P10 | Tariffs, FDI, procurement, NTMs | `web`, `file` |
+| **Digital economy & IP** | P4, P11, P12 | IP, standards, e-commerce, e-signatures | `web`, `file` |
+
+### Per-subagent brief
+
+Each subagent receives:
+- The economy name and assessment year
+- The list of pillars it owns
+- The required source types per pillar (from "Required Source Discipline by Indicator Type" section)
+- Clear instruction to return article numbers, citations, effective dates, and source URLs
+- Instruction to note `source_type: primary | secondary | secondary_database` for each finding
+- A `verification_status` per finding: `verified` (text obtained from official URL), `needs_review` (secondary source used), `missing` (no evidence found)
+
+### After parallel research
+
+After all subagents return:
+
+1. **Read the research files created** to merge findings into a single structured report.
+2. **Verify key provisions live** using browser tools or curl/download for at least the most critical provisions (data protection cross-border rules, FDI thresholds, safe harbour provisions). Subagent self-reports are not verified facts — always spot-check at least 2–3 provisions per economy by downloading the actual PDF from the official government/regulator website and extracting the relevant text.
+3. **Identify which pillars have verified primary sources** and which are still at secondary-source level.
+4. **Score only indicators where primary evidence exists**; mark all others as `provisional` or `missing`.
+5. **Compile into the Indicator Evidence Record shape** (see above) with explicit `score_status` on every entry.
+6. **Label the report** as `provisional` if any pillar lacks verified primary evidence. Never present an unverified report as a final score.
+
+### Pitfalls
+
+- **Subagents lack web search tools by default.** Pass `toolsets: ["web", "file"]` explicitly so they can fetch sources.
+- **Subagent tool output can be imprecise.** Subagents that claim "verified from official PDF" may have used training knowledge, not a live fetch. Verify the official URL and extracted text yourself.
+- **Do not ask subagents to score.** Restrict them to evidence discovery only. Scoring should be done centrally after verification, to ensure consistent calibration across pillars.
+- **Do not attempt all 12 pillars in one subagent.** Each subagent should own 2–4 related pillars max to keep its context focused.
+
+For a worked example of this pattern in action, see `references/japan-2025-evidence-report.md`. For a complete scored output with verified primary sources, see `references/australia-2025-scorecard.md`.
 
 ## Scoring Rule Types to Support
 
@@ -832,21 +915,25 @@ Avoid unsupported legal conclusions. If primary legal text is unavailable, say s
 
 5. **Using arbitrary token chunks that break legal meaning.** Chunk by legal hierarchy: part, chapter, article, paragraph, sub-clause, table row, schedule. Keep definitions and exceptions reachable.
 
-2. **Producing a final score from pillar-level impressions.** Formal RDTII scoring must be indicator-level. If only pillar-level evidence was reviewed, label the result as a rough provisional estimate.
+6. **Producing a final score from pillar-level impressions.** Formal RDTII scoring must be indicator-level. If only pillar-level evidence was reviewed, label the result as a rough provisional estimate.
 
-3. **Skipping required databases.** Some indicators require structured sources such as WTO I-TIP, Global Trade Alert, WITS, WTO tariff/trade remedy data, V-Dem, TAPED, or official agreement schedules. Do not replace these with generic web search when the guide names a specific source.
+7. **Skipping required databases.** Some indicators require structured sources such as WTO I-TIP, Global Trade Alert, WITS, WTO tariff/trade remedy data, V-Dem, TAPED, or official agreement schedules. Do not replace these with generic web search when the guide names a specific source.
 
-4. **Using secondary sources as final legal evidence.** Secondary sources should normally guide reviewers to primary sources, although database-derived indicators may legitimately cite the database output as part of the evidence record.
+8. **Using secondary sources as final legal evidence.** Secondary sources should normally guide reviewers to primary sources, although database-derived indicators may legitimately cite the database output as part of the evidence record.
 
-5. **Forcing one measure to one indicator.** Cross-cutting measures may map to multiple indicators.
+9. **Forcing one measure to one indicator.** Cross-cutting measures may map to multiple indicators.
 
-6. **Letting AI finalize scores.** Keep `ai_suggested_score`, `reviewer_score`, and `final_score` separate.
+10. **Letting AI finalize scores.** Keep `ai_suggested_score`, `reviewer_score`, and `final_score` separate.
 
-7. **Dropping citations or source-query logs.** Every final score should have traceable legal evidence and a record of which required databases were queried.
+11. **Dropping citations or source-query logs.** Every final score should have traceable legal evidence and a record of which required databases were queried.
 
-8. **Ignoring de jure/de facto gaps.** Note when the law says one thing but implementation, discretion, or institutional opacity may affect interpretation.
+12. **Ignoring de jure/de facto gaps.** Note when the law says one thing but implementation, discretion, or institutional opacity may affect interpretation.
 
-9. **Failing to preserve null/unknown states.** Unknown evidence should not be silently treated as score `0`.
+13. **Failing to preserve null/unknown states.** Unknown evidence should not be silently treated as score `0`.
+
+14. **Producing a report without attempting required database queries.** The user will call this out. Before compiling any report, attempt every named database (WTO I-TIP, TAPED, Global Trade Alert, V-Dem, WIPO Lex, WITS) via browser or curl. If blocked, document the failure explicitly in the evidence log. A report that says "missing evidence" without showing any attempt to query the named source is incomplete.
+
+15. **Not verifying subagent findings against live sources.** Subagent summaries are self-reports — they may claim "verified from official PDF" using training knowledge rather than a live fetch. Always spot-check at least 2–3 critical provisions per economy by downloading and reading the actual PDF from the official government/regulator website.
 
 ## Verification Checklist
 
@@ -874,4 +961,6 @@ Before finalizing an RDTII answer or design:
 - [ ] Did I log the exact scoring context: provision IDs, dependency IDs, database records, token count, rationale, ambiguity fields, and final score source?
 - [ ] Did I route genuine ambiguity to human review using `ambiguity_flag`, `alternative_interpretation`, and `missing_context` rather than inventing confidence numbers?
 - [ ] Did I calculate composite scores as weighted indicators within pillars and simple average across 12 pillars?
+- [ ] Did I document every blocked database attempt (error type, URL, alternative tried) in the evidence log rather than silently omitting it?
+- [ ] Did I verify subagent findings against live sources (download actual PDF, check article numbers) before incorporating them into scoring?
 - [ ] If the result is only pillar-level or missing required database checks, did I label it clearly as a rough provisional estimate rather than a formal score?
